@@ -21,6 +21,22 @@ async def remove_channel_to_updates(channel):
 	try:
 		database["update_channels"].pop(str(channel))
 	except: pass
+	try:
+		database["topics"].pop(str(channel))
+	except: pass
+	await save_data()
+
+def get_topic(channel):
+	"""ID топика (форума), в котором бот был настроен. None - обычный чат."""
+	return database.get("topics", {}).get(str(channel))
+
+async def set_topic(channel: str, thread_id):
+	"""Сохраняет топик форума, в котором была выполнена настройка бота."""
+	if thread_id is None:
+		return
+	if "topics" not in database:
+		database["topics"] = {}
+	database["topics"][str(channel)] = thread_id
 	await save_data()
 
 async def remove_groups_channel(channel: str):
