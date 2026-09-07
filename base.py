@@ -10,6 +10,10 @@ else:
     with open("base.json", "r", encoding="utf-8") as file:
         database = json.load(file)
 
+# Гарантируем наличие основных ключей даже в пустой базе
+for _key in ("channels", "update_channels", "topics"):
+    database.setdefault(_key, {})
+
 async def save_data():
     with open("base.json", "w+", encoding="utf-8") as file:
         json.dump(database, file, sort_keys=False, indent=4, ensure_ascii=False, separators=(',', ': '))
