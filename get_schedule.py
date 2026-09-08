@@ -83,6 +83,17 @@ def update_groups():
     except Exception as e:
         logging.error(f"Ошибка обновления групп: {e}")
 
+def _parse_pair_start(time_pair):
+    """'08:30-10:00' -> datetime(сегодня, 08:30). None при ошибке разбора."""
+    try:
+        start = str(time_pair).split("-")[0].strip()
+        h, m = start.split(":")[:2]
+        now = datetime.now()
+        return datetime(now.year, now.month, now.day, int(h), int(m))
+    except Exception:
+        return None
+
+
 async def get_schedule(tm, id_grp: str, channel_id: str):
     pattern = re.compile(r'https?://[^\s"]+')
 
@@ -101,6 +112,7 @@ async def get_schedule(tm, id_grp: str, channel_id: str):
     content = response.json()
 
     data_list = []
+    times = []
     for i in content:
         # Пропускаем фантомные записи (пустые NAME_STUD и NAME_DISC)
         name_stud = i.get("NAME_STUD", "").strip().strip("-").strip()
@@ -116,12 +128,17 @@ async def get_schedule(tm, id_grp: str, channel_id: str):
                 matches = [base.database["update_channels"][channel_id][i["NAME_FIO"]]]
         except: pass
 
+        pair_start = _parse_pair_start(i["TIME_PAIR"])
+        if pair_start is None:
+            continue
+
         data_list.append(f'`{groups[id_grp] if id_grp in groups.keys() else id_grp}`\n{i["NAME_PAIR"]} {"[" + i["TIME_PAIR"] + "](" + matches[0] + ")" if matches else i["TIME_PAIR"]} - {i["NAME_STUD"]}\n`{i["NAME_DISC"]}`\n{i["NAME_FIO"]}')
+        times.append(pair_start)
 
     text = ""
     for i in data_list: text += i + "\n\n"
 
-    return text, data_list
+    return text, data_list, times
 
 
 def _fetch_schedule_data(tm, id_grp: str, channel_id: str):

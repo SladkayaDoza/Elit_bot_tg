@@ -1,4 +1,4 @@
-from get_schedule import get_schedule, get_next_time, update_groups, get_schedule_data
+from get_schedule import get_schedule, update_groups, get_schedule_data
 import get_schedule as schedule_module
 from datetime import datetime, timedelta
 from pyrogram import Client, filters, idle
@@ -81,8 +81,8 @@ async def update_database():
         for i in list(base.database["channels"].keys()):
             for unit in base.database["channels"][str(i)]:
                 try:
-                    times = get_next_time(unit)
-                    _, texts = await get_schedule(datetime.now().strftime("%d.%m.%Y"), unit, i)
+                    # Тексты и время пар из одного ответа API - индексы всегда совпадают
+                    _, texts, times = await get_schedule(datetime.now().strftime("%d.%m.%Y"), unit, i)
                     print(texts)
 
                     for t, j in enumerate(times):
@@ -165,23 +165,35 @@ DAY_OFFSETS = [
 
 RICH_CHUNK_LIMIT = 3500
 
+# Определяется при первом запуске: если сервер вернул 404 на sendRichMessage,
+# дальше шлём сразу fallback без лишних попыток
+rich_supported = True
+
 
 async def send_rich(chat_id, rich_html, fallback_html, message_thread_id=None):
     """sendRichMessage с fallback на sendMessage (старые клиенты/ошибка rich)."""
-    url = f"https://api.telegram.org/bot{bot_token}/sendRichMessage"
-    payload = {"chat_id": chat_id, "rich_message": {"html": rich_html}}
-    if message_thread_id:
-        payload["message_thread_id"] = message_thread_id
-    try:
-        async with aiohttp.ClientSession() as s:
-            async with s.post(url, json=payload,
-                              timeout=aiohttp.ClientTimeout(total=30)) as resp:
-                result = await resp.json()
-        if result.get("ok"):
-            return True
-        logging.warning(f"sendRichMessage отклонён: {result}")
-    except Exception as e:
-        logging.error(f"sendRichMessage ошибка: {e}")
+    global rich_supported
+    if rich_supported:
+        url = f"https://api.telegram.org/bot{bot_token}/sendRichMessage"
+        payload = {"chat_id": chat_id, "rich_message": {"html": rich_html}}
+        if message_thread_id:
+            payload["message_thread_id"] = message_thread_id
+        try:
+            async with aiohttp.ClientSession() as s:
+                async with s.post(url, json=payload,
+                                  timeout=aiohttp.ClientTimeout(total=30)) as resp:
+                    result = await resp.json()
+            if result.get("ok"):
+                return True
+            # 404 Not Found — метода нет на этом сервере, дальше не пытаемся
+            if result.get("error_code") == 404:
+                rich_supported = False
+                logging.warning("sendRichMessage не поддерживается этим API-сервером, "
+                                "используется обычный sendMessage")
+            else:
+                logging.warning(f"sendRichMessage отклонён: {result}")
+        except Exception as e:
+            logging.error(f"sendRichMessage ошибка: {e}")
 
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
     payload = {"chat_id": chat_id, "text": fallback_html, "parse_mode": "HTML",
